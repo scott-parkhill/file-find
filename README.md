@@ -1,4 +1,4 @@
-# file-find
+# File Find
 File Find program for simplifying common find command searches. Made because VS Code has garbage explorer search.
 
 ## Install
