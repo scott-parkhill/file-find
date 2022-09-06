@@ -1,6 +1,8 @@
 # file-find
 File Find program for simplifying common find command searches. Made because VS Code has garbage explorer search.
 
+## Install
+
 Just add the directory containing the program to your path to use it.
 
 Example: `ff` lives in `~/scripts`
