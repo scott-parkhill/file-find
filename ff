@@ -1,0 +1,159 @@
+#!/bin/bash
+
+# Distributed under GPLv3 license.
+
+# File Find
+# Simplified file finding for common use cases.
+
+HELP_TEXT="File Find
+
+File Find is a program that customizes and simplifies the use of the find command and allows for output of the find command to be opened in various editors.
+Remember to use single quotes around the wildcard expression, like 'GenericCard*' instead of simply GenericCard*.
+
+This program requires one positional parameter, which is the filename search pattern.
+
+	-a, --all		used alongside -c and -k; changes behaviour from opening the first file found to all files found
+	-c, --code		opens the found file(s) in vscode
+	-h, --help		prints this help
+	-k, --kate		opens the found file(s) in kate
+	-s, --search-dir	specifies the directory to be searched; defaults to '.'
+	-v, --verbose		used alongside -c and -k; prints the results of the search even if you're opening one or more files
+	-x, --exclude 		excludes a directory and its descendents from being searched
+	
+Example command:
+	ff 'GenericCard*' -s .. -x ../Business -v -c -a
+"
+
+HELP="false"
+VERBOSE="false"
+ERROR="false"
+KATE="false"		# Open in Kate
+VSCODE="false"		# Open in VS Code
+OPEN_ALL="false"	# Open all files found
+
+# Positional parameter.
+FILENAME="$1"
+
+# If help is the first command or the program was executed with no parameters, print the help and exit with success.
+if [ -z "$FILENAME" ] || [ "$FILENAME" == "-h" ] || [ "$FILENAME" == "--help" ] ; then
+	echo "$HELP_TEXT"
+	exit 0
+	
+# Else if the filename starts with a hyphen but is not looking for help.
+elif [[ "$FILENAME" == -* ]] ; then
+	echo "No filename pattern supplied."
+	ERROR="true"
+	
+# Shift if not starting with - because if it starts with - you still want it to fall through the case
+# statement below to see if it's a valid command or not.
+else
+	shift
+fi
+
+# Parameters from flags.
+SEARCH_DIR="."
+EXPANDED_SEARCH_DIR="$SEARCH_DIR"
+EXCLUDED_DIRS=
+
+# Read flags in from parameters.
+while [ "$#" -gt 0 ] ; do
+	case "$1" in
+		-a | --all ) OPEN_ALL="true"; shift ;;
+		-c | --code ) VSCODE="true"; shift ;;
+		-h | --help) HELP="true"; break ;;
+		-k | --kate ) KATE="true"; shift ;;
+		-s | --search-dir ) SEARCH_DIR="$2"; shift 2 ;;
+		-v | --verbose ) VERBOSE="true"; shift ;;
+		-x | --exclude ) EXCLUDED_DIRS="${EXCLUDED_DIRS} ! -path '${2}/*'"; shift 2 ;;
+		* ) echo "$1 is not a recognized command."; ERROR="true"; shift ;;
+	esac
+done
+
+# Create the expanded directory string.
+if [[ "$SEARCH_DIR" == ..* ]] ; then
+	EXPANDED_SEARCH_DIR="$(pwd)/.."
+elif [[ "$SEARCH_DIR" == .* ]] ; then
+	EXPANDED_SEARCH_DIR="$(pwd)"
+elif [[ "$SEARCH_DIR" == ~* ]] ; then
+	EXPANDED_SEARCH_DIR="/home/$USER"
+fi
+	
+# Determine exclusions based on where the search is occurring.
+# Uses EXPANDED_SEARCH_DIR to match the keyword, and then uses SEARCH_DIR in the path.
+case "$EXPANDED_SEARCH_DIR" in
+	*"WebModules"*) EXCLUDED_DIRS="${EXCLUDED_DIRS} ! -path '${SEARCH_DIR}/obj/*'" ;;
+	* ) ;;
+esac
+
+# If looking for help, print it.
+if [ "$HELP" == "true" ] ; then
+	echo "$HELP_TEXT"
+
+# If no error has occurred in command parsing, execute the body of the script.
+elif [ "$ERROR" == "false" ] ; then
+	# Create the command and execute it.
+	COMMAND="find ${SEARCH_DIR} ${EXCLUDED_DIRS} -name '${FILENAME}' -print"
+	RESULTS=$(eval $COMMAND)
+	
+	# Open file(s) in appropriate editor.
+	# It's important to not have any quote marks around those variables below.
+	if [ "$KATE" == "true" ] || "$VSCODE" == "true" ] ; then
+		OPEN_COMMAND=
+		FILE_FOUND="false"
+		
+		[ "$KATE" == "true" ] && OPEN_COMMAND="kate"
+		[ "$VSCODE" == "true" ] && OPEN_COMMAND="code -r"
+		
+		# Set the results string as the new parameters to the program.
+		set -- $RESULTS
+		
+		# While there are parameters to loop through, do so.
+		while [ ! -z "$1" ] ; do
+			
+			# Skip the parameter if it's a directory.
+			if [ -d "$1" ] ; then
+				shift
+			else
+				FILE_FOUND="true"
+				OPEN_COMMAND="${OPEN_COMMAND} ${1}"
+				
+				# Break if the program is only supposed to open the first file.
+				[ "$OPEN_ALL" == "false" ] && break
+				
+				shift
+			fi
+		done
+		
+		# Print results if in verbose mode.
+		if [ "$VERBOSE" == "true" ] ; then
+			if [ -z "$RESULTS" ] ; then
+				echo "No results found."
+			elif [ "$FILE_FOUND" == "false" ] ; then
+				echo "Only directories found; nothing to open."
+				echo
+				echo "$RESULTS"
+			else
+				echo "$RESULTS"
+			fi
+		fi
+		
+		# Execute the open command, redirecting output to /dev/null instead of nohup.out.
+		eval nohup $OPEN_COMMAND &> /dev/null
+		
+	# If the files searched are not to be opened, then print the results.
+	else
+		if [ -z "$RESULTS" ] ; then
+			echo "No results found."
+		else
+			echo "$RESULTS"
+		fi
+	fi
+	
+# Otherwise, exit with failure.
+else
+	echo "Execution failed."
+	exit 1
+fi
+
+# Exit with success.
+exit 0
